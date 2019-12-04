@@ -1,8 +1,7 @@
 const INPUT: &str = include_str!("../day2.txt");
 
 fn main() {
-    let mem0 = calc_day2(12, 2);
-    println!("Day 2-1: {}", mem0);
+    println!("Day 2-1: {}", calc_day2(12, 2));
     println!("Day 2-2: {}", day2_pt2().expect("No answer found!"))
 }
 
@@ -48,7 +47,7 @@ fn calc_day2(noun: i32, verb: i32) -> i32 {
                 memory[dest_pos] = result;
             }
             99 => return memory[0],
-            _ => panic!(),
+            _ => panic!("Unknown opcode!"),
         };
         pos += 4;
     }

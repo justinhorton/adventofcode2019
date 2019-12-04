@@ -1,4 +1,8 @@
-use std::ops::RangeInclusive;
+use crate::point::{Delta, Point, START_POINT};
+use crate::segment::SegmentCalculator;
+
+mod point;
+mod segment;
 
 const INPUT: &str = include_str!("../day3.txt");
 
@@ -7,112 +11,9 @@ fn main() {
     println!("Day 3-2: {}", calc_day3(|it| it.total_distance));
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-struct Point {
-    x: i32,
-    y: i32,
-}
-
-const START_POINT: Point = Point { x: 0, y: 0 };
-impl Point {
-    fn dist_from(&self, other: &Point) -> i32 {
-        (self.x - other.x).abs() + (self.y - other.y).abs()
-    }
-
-    fn manhattan_distance(&self) -> i32 {
-        self.dist_from(&START_POINT)
-    }
-}
-
-struct Delta {
-    dx: i32,
-    dy: i32,
-}
-
-impl Delta {
-    fn apply_to(&self, point: &Point) -> Point {
-        Point {
-            x: point.x + self.dx,
-            y: point.y + self.dy,
-        }
-    }
-
-    fn from(direction: &str, distance: i32) -> Delta {
-        let (dx, dy) = match direction {
-            "L" => (-distance, 0),
-            "R" => (distance, 0),
-            "U" => (0, distance),
-            "D" => (0, -distance),
-            _ => panic!("Unknown direction: {}", direction),
-        };
-        Delta { dx, dy }
-    }
-}
-
 struct Intersection {
     point: Point,
     total_distance: i32,
-}
-
-#[derive(Debug)]
-struct Segment {
-    p1: Point,
-    p2: Point,
-}
-
-impl Segment {
-    fn intersection_with(&self, other: &Segment) -> Option<Point> {
-        let orientation = (self.dx() != 0, other.dx() != 0);
-        match orientation {
-            (false, true) => Segment::do_find_intersection(self, other),
-            (true, false) => Segment::do_find_intersection(other, self),
-            _ => None,
-        }
-    }
-
-    fn do_find_intersection(
-        vertical_segment: &Segment,
-        horizontal_segment: &Segment,
-    ) -> Option<Point> {
-        let x_range = Segment::ordered_range(horizontal_segment.p1.x, horizontal_segment.p2.x);
-        let y_range = Segment::ordered_range(vertical_segment.p1.y, vertical_segment.p2.y);
-        let candidate_x = vertical_segment.p1.x;
-        let candidate_y = horizontal_segment.p1.y;
-
-        if x_range.contains(&candidate_x) && y_range.contains(&candidate_y) {
-            Some(Point {
-                x: candidate_x,
-                y: candidate_y,
-            })
-        } else {
-            None
-        }
-    }
-
-    fn dx(&self) -> i32 {
-        self.p1.x - self.p2.x
-    }
-
-    fn dy(&self) -> i32 {
-        self.p1.y - self.p2.y
-    }
-
-    fn length(&self) -> i32 {
-        if self.dx() != 0 {
-            self.dx().abs()
-        } else {
-            self.dy().abs()
-        }
-    }
-
-    fn ordered_range(coord1: i32, coord2: i32) -> RangeInclusive<i32> {
-        // a range such as 6..=2 does not "contain" values (2, 6], so need to invert it
-        if coord1 <= coord2 {
-            coord1..=coord2
-        } else {
-            coord2..=coord1
-        }
-    }
 }
 
 fn calc_day3(distance_fn: fn(&Intersection) -> i32) -> i32 {
@@ -187,17 +88,4 @@ fn points_by_wire(wires: Vec<&str>) -> Vec<Vec<Point>> {
         }
     }
     points_by_wire
-}
-
-trait SegmentCalculator {
-    fn segment_ending_at(&self, index: usize) -> Segment;
-}
-
-impl SegmentCalculator for Vec<Point> {
-    fn segment_ending_at(&self, index: usize) -> Segment {
-        Segment {
-            p1: *(self.get(index - 1).unwrap()),
-            p2: *(self.get(index).unwrap()),
-        }
-    }
 }
