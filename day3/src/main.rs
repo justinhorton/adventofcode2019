@@ -1,102 +1,8 @@
 use std::ops::RangeInclusive;
 
+const INPUT: &str = include_str!("../day3.txt");
+
 fn main() {
-    day1();
-    day2();
-    day3();
-}
-
-/*~~~ DAY 1 ~~~*/
-const INPUT_DAY1: &str = include_str!("../input/day1.txt");
-
-fn day1() {
-    println!("day 1-2: {}", get_total_fuel(calc_fuel_mass_only));
-    println!("day 1-2: {}", get_total_fuel(calc_fuel_package_and_fuel))
-}
-
-fn get_total_fuel(fuel_fn: fn(i32) -> i32) -> i32 {
-    INPUT_DAY1
-        .lines()
-        .map(|line| line.parse::<i32>().expect(&format!("Can't parse int")))
-        .map(fuel_fn)
-        .sum()
-}
-
-// fuel calculation
-fn calc_fuel_mass_only(mass: i32) -> i32 {
-    mass / 3 - 2
-}
-
-fn calc_fuel_package_and_fuel(mass: i32) -> i32 {
-    let mut result = 0;
-    let mut cur_fuel = calc_fuel_mass_only(mass);
-
-    while cur_fuel > 0 {
-        result += cur_fuel;
-        cur_fuel = calc_fuel_mass_only(cur_fuel);
-    }
-    result
-}
-
-/*~~~ DAY 2 ~~~*/
-
-const INPUT_DAY2: &str = include_str!("../input/day2.txt");
-fn day2() {
-    let mem0 = calc_day2(12, 2);
-    println!("Day 2-1: {}", mem0);
-
-    for n in 0..99 {
-        for v in 0..99 {
-            let result = calc_day2(n, v);
-            if result == 19690720 {
-                let answer = 100 * n + v;
-                println!("Day 2-2: {}", answer);
-                return;
-            }
-        }
-    }
-}
-
-// OPCODE 1: 1,op1,op2,dest; set dest = *op1 + *op2
-// OPCODE 2: 2,op1,op2,dest; set dest = *op1 * *op2
-// OPCODE 99: halt
-// OPCODE anything else: error
-fn calc_day2(noun: i32, verb: i32) -> i32 {
-    let input: Vec<&str> = INPUT_DAY2.split(',').collect();
-    let mut memory: Vec<i32> = input
-        .iter()
-        .map(|it| it.parse::<i32>().expect("Can't parse int"))
-        .collect();
-
-    // restore the state at the time of the elf problem
-    memory[1] = noun;
-    memory[2] = verb;
-
-    let mut pos = 0;
-    while pos < memory.len() {
-        let opcode = memory[pos];
-        match opcode {
-            1..=2 => {
-                let op1_pos = memory[pos + 1] as usize;
-                let op2_pos = memory[pos + 2] as usize;
-                let dest_pos = memory[pos + 3] as usize;
-                let op1 = memory[op1_pos];
-                let op2 = memory[op2_pos];
-
-                let result = if opcode == 1 { op1 + op2 } else { op1 * op2 };
-                memory[dest_pos] = result;
-            }
-            99 => return memory[0],
-            _ => panic!(),
-        };
-        pos += 4;
-    }
-    memory[0]
-}
-
-/*~~~ DAY 3 ~~~*/
-const INPUT_DAY3: &str = include_str!("../input/day3.txt");
-fn day3() {
     println!("Day 3-1: {}", calc_day3(|it| it.point.manhattan_distance()));
     println!("Day 3-2: {}", calc_day3(|it| it.total_distance));
 }
@@ -210,7 +116,7 @@ impl Segment {
 }
 
 fn calc_day3(distance_fn: fn(&Intersection) -> i32) -> i32 {
-    let wires: Vec<&str> = INPUT_DAY3.trim().lines().collect();
+    let wires: Vec<&str> = INPUT.trim().lines().collect();
 
     let points_by_wire = points_by_wire(wires);
     // just stick to 2 wires here
