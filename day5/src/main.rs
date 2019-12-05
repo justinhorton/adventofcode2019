@@ -77,6 +77,34 @@ fn run_diagnostic() -> Result<i32, String> {
                         println!("{}", output);
                         pc += 2;
                     }
+                    OP_JIT => {
+                        let r0 = get_parameter(pc, &memory, 0, &inst);
+                        let new_pc = get_parameter(pc, &memory, 1, &inst) as usize;
+
+                        pc = if r0 != 0 { new_pc } else { pc + 3 };
+                    }
+                    OP_JIF => {
+                        let r0 = get_parameter(pc, &memory, 0, &inst);
+                        let new_pc = get_parameter(pc, &memory, 1, &inst) as usize;
+
+                        pc = if r0 == 0 { new_pc } else { pc + 3 };
+                    }
+                    OP_JLT => {
+                        let r0 = get_parameter(pc, &memory, 0, &inst);
+                        let r1 = get_parameter(pc, &memory, 1, &inst);
+                        let dest_pos = memory[pc + 3] as usize;
+
+                        memory[dest_pos] = if r0 < r1 { 1 } else { 0 };
+                        pc += 4;
+                    }
+                    OP_EQ => {
+                        let r0 = get_parameter(pc, &memory, 0, &inst);
+                        let r1 = get_parameter(pc, &memory, 1, &inst);
+                        let dest_pos = memory[pc + 3] as usize;
+
+                        memory[dest_pos] = if r0 == r1 { 1 } else { 0 };
+                        pc += 4;
+                    }
                     OP_HALT => return Ok(memory[0]),
                     x => {
                         return Err(format!("Unknown opcode: {}", x))
@@ -134,10 +162,22 @@ impl Display for InvalidOpcode {
     }
 }
 
+/*
+
+    Opcode 5 is jump-if-true: if the first parameter is non-zero, it sets the instruction pointer to the value from the second parameter. Otherwise, it does nothing.
+    Opcode 6 is jump-if-false: if the first parameter is zero, it sets the instruction pointer to the value from the second parameter. Otherwise, it does nothing.
+    Opcode 7 is less than: if the first parameter is less than the second parameter, it stores 1 in the position given by the third parameter. Otherwise, it stores 0.
+    Opcode 8 is equals: if the first parameter is equal to the second parameter, it stores 1 in the position given by the third parameter. Otherwise, it stores 0.
+
+*/
 const OP_ADD: i8 = 1;
 const OP_MUL: i8 = 2;
 const OP_INPUT: i8 = 3;
 const OP_OUTPUT: i8 = 4;
+const OP_JIT: i8 = 5;
+const OP_JIF: i8 = 6;
+const OP_JLT: i8 = 7;
+const OP_EQ: i8 = 8;
 const OP_HALT: i8 = 99;
 
 fn destructure_inst(inst: i32) -> Result<Instruction, InvalidOpcode> {
