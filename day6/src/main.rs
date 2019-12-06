@@ -34,7 +34,7 @@ fn main() {
     );
 }
 
-fn day6_part1(graph: &Graph) -> i32 {
+fn day6_part1(graph: &Graph) -> usize {
     let mut orbits = 0;
     for i in 0..graph.nodes.len() {
         orbits += graph.num_reachable_nodes(i);
@@ -45,20 +45,16 @@ fn day6_part1(graph: &Graph) -> i32 {
 fn day6_part2(graph: &Graph) -> Option<usize> {
     // TODO: There's probably a less roundabout way of doing this.
     // find the ordered successors for YOU and SAN
-    let mut you_all_successors = Vec::new();
-    graph.all_successors(
-        graph.node_index("YOU").expect("Where are YOU?"),
-        &mut you_all_successors,
-    );
+    let you = graph.node_index("YOU").expect("Where are YOU?");
+    let san = graph.node_index("SAN").expect("Where are you, SAN?!");
 
-    let mut san_all_successors = Vec::new();
-    graph.all_successors(
-        graph.node_index("SAN").expect("Where are you, SAN?!"),
-        &mut san_all_successors,
-    );
+    let you_all_successors = graph.all_successors(you);
+    let san_all_successors = graph.all_successors(san);
 
-    // The first matching index between successors is the least common successor between
-    // YOU and SAN. The number of edges is just the sum of the indices into the successors.
+    // The first matching index between successors is the least common ancestor between YOU and SAN.
+    // The successor index represents the number of edges taken to reach that successor. So, the
+    // LCA is the first shared NodeIndex between the two lists of successors and the number of
+    // orbital transits is the sum of the LCA's index in each list.
     for i in 0..you_all_successors.len() {
         for j in 0..san_all_successors.len() {
             if you_all_successors.get(i) == san_all_successors.get(j) {
@@ -105,16 +101,6 @@ impl Graph {
         node_data.first_outgoing_edge = Some(edge_index);
     }
 
-    fn all_successors(&self, source: NodeIndex, vec: &mut Vec<NodeIndex>) {
-        let mut iter = self.successors(source);
-        while let Some(i) = iter.next() {
-            if !vec.contains(&i) {
-                vec.push(i);
-            }
-            self.all_successors(i, vec);
-        }
-    }
-
     fn successors(&self, source: NodeIndex) -> Successors {
         let first_outgoing_edge = self.nodes[source].first_outgoing_edge;
         Successors {
@@ -123,13 +109,24 @@ impl Graph {
         }
     }
 
-    fn num_reachable_nodes(&self, source: NodeIndex) -> i32 {
+    fn all_successors(&self, source: NodeIndex) -> Vec<NodeIndex> {
+        let mut successors = Vec::new();
+        self.all_successors_impl(source, &mut successors);
+        successors
+    }
+
+    fn all_successors_impl(&self, source: NodeIndex, successors: &mut Vec<NodeIndex>) {
         let mut iter = self.successors(source);
-        let mut count = 0;
         while let Some(i) = iter.next() {
-            count += 1 + self.num_reachable_nodes(i);
+            if !successors.contains(&i) {
+                successors.push(i);
+            }
+            self.all_successors_impl(i, successors);
         }
-        count
+    }
+
+    fn num_reachable_nodes(&self, source: NodeIndex) -> usize {
+        self.all_successors(source).len()
     }
 }
 
