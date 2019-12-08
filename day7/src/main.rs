@@ -71,8 +71,11 @@ fn run_all_amplifiers(start_memory: &Vec<i32>, phases: &Vec<&i32>, with_feedback
                 }
                 IntcodeResult::Halted => {
                     println!("Amp {} halted", amp_i);
-                    return last_output.expect("Something went wrong; no output to return");
+                    if amp_i == 4 {
+                        return last_output.expect("Something went wrong; no output to return");
+                    }
                 }
+                _ => {}
             };
         }
 
@@ -118,6 +121,90 @@ impl ProgramState {
         }
     }
 
+    fn apply(&mut self, operation: &Operation) -> IntcodeResult {
+        match operation.op {
+            Op::Add => {
+                let store = operation.r2() as usize;
+                let r0 = operation.r0();
+                let r1 = operation.r1();
+
+                self.store(store, r0 + r1);
+                println!("ADD {} {} -> {}", r0, r1, store);
+                self.inc_pc(4);
+            }
+            Op::Mul => {
+                let store = operation.r2() as usize;
+                let r0 = operation.r0();
+                let r1 = operation.r1();
+
+                self.store(store, r0 * r1);
+                println!("MUL {} {} -> {}", r0, r1, store);
+                self.inc_pc(4);
+            }
+            Op::Input => match self.consume_input() {
+                Some(value) => {
+                    let store = operation.r0() as usize;
+
+                    self.store(store, value);
+                    println!("INPUT: {} -> {}", value, store);
+                    self.inc_pc(2);
+                }
+                None => return IntcodeResult::AwaitingInput { pc: self.pc },
+            },
+            Op::Output => {
+                let output = operation.r0();
+
+                println!("OUTPUT: {}", output);
+                self.inc_pc(2);
+                return IntcodeResult::Output { output };
+            }
+            Op::Jit => {
+                let r0 = operation.r0();
+                let pc = if r0 != 0 {
+                    let new_pc = operation.r1() as usize;
+                    println!("JIT {} (pass): PC <-- {}", r0, new_pc);
+                    new_pc
+                } else {
+                    println!("JIT {} (fail): PC <-- {}", r0, self.pc + 3);
+                    self.pc + 3
+                };
+                self.set_pc(pc);
+            }
+            Op::Jif => {
+                let r0 = operation.r0();
+                let pc = if r0 == 0 {
+                    let new_pc = operation.r1() as usize;
+                    println!("JIF {} (pass): PC <-- {}", r0, new_pc);
+                    new_pc
+                } else {
+                    println!("JIF {} (fail): PC <-- {}", r0, self.pc + 3);
+                    self.pc + 3
+                };
+                self.set_pc(pc);
+            }
+            Op::Lt => {
+                let r0 = operation.r0();
+                let r1 = operation.r1();
+                let store = operation.r2() as usize;
+
+                self.store(store, if r0 < r1 { 1 } else { 0 });
+                println!("LT {}, {} -> {}", r0, r1, store);
+                self.inc_pc(4);
+            }
+            Op::Eq => {
+                let r0 = operation.r0();
+                let r1 = operation.r1();
+                let store = operation.r2() as usize;
+
+                self.store(store, if r0 == r1 { 1 } else { 0 });
+                println!("LT {}, {} -> {}", r0, r1, store);
+                self.inc_pc(4);
+            }
+            Op::Halt => return IntcodeResult::Halted,
+        };
+        return IntcodeResult::AdvanceInstruction;
+    }
+
     fn set_pc(&mut self, new_pc: usize) {
         self.pc = new_pc
     }
@@ -142,107 +229,27 @@ impl ProgramState {
 enum IntcodeResult {
     Output { output: i32 },
     AwaitingInput { pc: usize },
+    AdvanceInstruction,
     Halted,
 }
 
 fn run(ps: &mut ProgramState) -> IntcodeResult {
     println!("Resuming with PC: {}", ps.pc);
 
-    while ps.pc < ps.memory.len() {
+    loop {
         let instruction = destructure_inst(ps.memory[ps.pc]);
         match instruction {
             Ok(inst) => {
-                let r0 = get_parameter(ps.pc, &ps.memory, 0, &inst);
-                let r1 = get_parameter(ps.pc, &ps.memory, 1, &inst);
-                let r2 = get_parameter(ps.pc, &ps.memory, 2, &inst);
-                match inst.op {
-                    Op::Add => {
-                        let store = r2.unwrap() as usize;
-                        let r0 = r0.unwrap();
-                        let r1 = r1.unwrap();
-
-                        ps.store(store, r0 + r1);
-                        println!("ADD {} {} -> {}", r0, r1, store);
-                        ps.inc_pc(4);
-                    }
-                    Op::Mul => {
-                        let store = r2.unwrap() as usize;
-                        let r0 = r0.unwrap();
-                        let r1 = r1.unwrap();
-
-                        ps.store(store, r0 * r1);
-                        println!("MUL {} {} -> {}", r0, r1, store);
-                        ps.inc_pc(4);
-                    }
-                    Op::Input => match ps.consume_input() {
-                        Some(value) => {
-                            let store = r0.unwrap() as usize;
-
-                            ps.store(store, value);
-                            println!("INPUT: {} -> {}", value, store);
-                            ps.inc_pc(2);
-                        }
-                        None => {
-                            return IntcodeResult::AwaitingInput { pc: ps.pc };
-                        }
-                    },
-                    Op::Output => {
-                        let output = r0.unwrap();
-
-                        println!("OUTPUT: {}", output);
-                        ps.inc_pc(2);
-                        return IntcodeResult::Output { output };
-                    }
-                    Op::Jit => {
-                        let r0 = r0.unwrap();
-                        let pc = if r0 != 0 {
-                            let new_pc = r1.unwrap() as usize;
-                            println!("JIT {} (pass): PC <-- {}", r0, new_pc);
-                            new_pc
-                        } else {
-                            println!("JIT {} (fail): PC <-- {}", r0, ps.pc + 3);
-                            ps.pc + 3
-                        };
-                        ps.set_pc(pc);
-                    }
-                    Op::Jif => {
-                        let r0 = r0.unwrap();
-                        let pc = if r0 == 0 {
-                            let new_pc = r1.unwrap() as usize;
-                            println!("JIF {} (pass): PC <-- {}", r0, new_pc);
-                            new_pc
-                        } else {
-                            println!("JIF {} (fail): PC <-- {}", r0, ps.pc + 3);
-                            ps.pc + 3
-                        };
-                        ps.set_pc(pc);
-                    }
-                    Op::Lt => {
-                        let r0 = r0.unwrap();
-                        let r1 = r1.unwrap();
-                        let store = r2.unwrap() as usize;
-
-                        ps.store(store, if r0 < r1 { 1 } else { 0 });
-                        println!("LT {}, {} -> {}", r0, r1, store);
-                        ps.inc_pc(4);
-                    }
-                    Op::Eq => {
-                        let r0 = r0.unwrap();
-                        let r1 = r1.unwrap();
-                        let store = r2.unwrap() as usize;
-
-                        ps.store(store, if r0 == r1 { 1 } else { 0 });
-                        println!("LT {}, {} -> {}", r0, r1, store);
-                        ps.inc_pc(4);
-                    }
-                    Op::Halt => return IntcodeResult::Halted,
-                };
+                let operation = inst.as_operation(ps.pc, &ps.memory);
+                let result = ps.apply(&operation);
+                match result {
+                    IntcodeResult::AdvanceInstruction => {}
+                    _ => return result,
+                }
             }
             Err(e) => panic!(format!("Aborting, invalid opcode: {:?}", e)),
         }
     }
-
-    panic!(format!("Program halted unexpectedly"))
 }
 
 fn destructure_inst(inst: i32) -> std::result::Result<Instruction, InvalidOpCodeError> {
@@ -293,6 +300,41 @@ fn get_parameter(
 struct Instruction {
     op: Op,
     addr_modes: Vec<AddressingMode>,
+}
+
+struct Operation<'a> {
+    op: &'a Op,
+    r0: Option<i32>,
+    r1: Option<i32>,
+    r2: Option<i32>,
+}
+
+impl Operation<'_> {
+    fn r0(&self) -> i32 {
+        self.r0.unwrap()
+    }
+
+    fn r1(&self) -> i32 {
+        self.r1.unwrap()
+    }
+
+    fn r2(&self) -> i32 {
+        self.r2.unwrap()
+    }
+}
+
+impl Instruction {
+    fn as_operation(&self, pc: usize, memory: &Vec<i32>) -> Operation {
+        let r0 = get_parameter(pc, memory, 0, &self);
+        let r1 = get_parameter(pc, memory, 1, &self);
+        let r2 = get_parameter(pc, memory, 2, &self);
+        Operation {
+            op: &self.op,
+            r0,
+            r1,
+            r2,
+        }
+    }
 }
 
 #[derive(Debug)]
