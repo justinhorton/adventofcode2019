@@ -24,3 +24,17 @@ version = "0.1.0"
 name = "day6"
 version = "0.1.0"
 
+[[package]]
+name = "day7"
+version = "0.1.0"
+dependencies = [
+ "permutate 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "permutate"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[metadata]
+"checksum permutate 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "53b7d5b19a715ffab38693a9dd44b067fdfa2b18eef65bd93562dfe507022fae"
