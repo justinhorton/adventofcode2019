@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 permutate = "0.3.2"
+intcode = { path = "../intcode" }
