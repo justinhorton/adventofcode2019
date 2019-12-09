@@ -1,17 +1,17 @@
-extern crate permutate;
 extern crate intcode;
+extern crate permutate;
 
+use intcode::{parse_intcode_input, IntcodeProgram, IntcodeResult};
 use permutate::Permutator;
 use std::cmp::max;
-use intcode::{IntcodeProgram, IntcodeResult, parse_intcode_input};
 
 const INPUT: &str = include_str!("../day7.txt");
-const INPUT_SIGNAL: i32 = 0;
-const PT1_PHASES: [&i32; 5] = [&0, &1, &2, &3, &4];
-const PT2_PHASES: [&i32; 5] = [&9, &8, &7, &6, &5];
+const INPUT_SIGNAL: i64 = 0;
+const PT1_PHASES: [&i64; 5] = [&0, &1, &2, &3, &4];
+const PT2_PHASES: [&i64; 5] = [&9, &8, &7, &6, &5];
 
 fn main() {
-    let memory: Vec<i32> = parse_intcode_input(&INPUT);
+    let memory: Vec<i64> = parse_intcode_input(&INPUT);
     let part1 = maximum_signal(memory.clone(), false, PT1_PHASES);
     let part2 = maximum_signal(memory.clone(), true, PT2_PHASES);
 
@@ -20,17 +20,17 @@ fn main() {
 }
 
 fn maximum_signal(
-    original_memory: Vec<i32>,
+    original_memory: Vec<i64>,
     with_feedback: bool,
-    possible_phases: [&i32; 5],
-) -> i32 {
+    possible_phases: [&i64; 5],
+) -> i64 {
     // TODO: Well, definitely write something better for permuting w/o repetition...
     let da_phases = possible_phases;
-    let possible_phases: &[&i32] = &possible_phases;
+    let possible_phases: &[&i64] = &possible_phases;
     let possible_phases = [possible_phases];
     let mut permutator = Permutator::new(&possible_phases[..]);
 
-    let mut max_signal: Option<i32> = None;
+    let mut max_signal: Option<i64> = None;
     while let Some(permutation) = next_non_repeating(&mut permutator, &da_phases) {
         let signal = run_all_amplifiers(&mut original_memory.clone(), &permutation, with_feedback);
         max_signal = match max_signal {
@@ -41,7 +41,7 @@ fn maximum_signal(
     return max_signal.unwrap();
 }
 
-fn run_all_amplifiers(start_memory: &Vec<i32>, phases: &Vec<&i32>, with_feedback: bool) -> i32 {
+fn run_all_amplifiers(start_memory: &Vec<i64>, phases: &Vec<&i64>, with_feedback: bool) -> i64 {
     let mut intcode_amps: Vec<IntcodeProgram> = Vec::new();
 
     intcode_amps.push(IntcodeProgram::init(
@@ -82,10 +82,10 @@ fn run_all_amplifiers(start_memory: &Vec<i32>, phases: &Vec<&i32>, with_feedback
 }
 
 fn next_non_repeating<'a>(
-    permutator: &mut Permutator<'a, i32>,
-    phases: &[&i32; 5],
-) -> Option<Vec<&'a i32>> {
-    fn contains_all_phases(permutation: &Vec<&i32>, phases: &[&i32; 5]) -> bool {
+    permutator: &mut Permutator<'a, i64>,
+    phases: &[&i64; 5],
+) -> Option<Vec<&'a i64>> {
+    fn contains_all_phases(permutation: &Vec<&i64>, phases: &[&i64; 5]) -> bool {
         for phase in phases {
             if !permutation.contains(phase) {
                 return false;
@@ -104,7 +104,7 @@ fn next_non_repeating<'a>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{maximum_signal, PT1_PHASES, INPUT, PT2_PHASES};
+    use crate::{maximum_signal, INPUT, PT1_PHASES, PT2_PHASES};
     use intcode::parse_intcode_input;
 
     #[test]

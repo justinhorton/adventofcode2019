@@ -11,7 +11,7 @@ const PT2_IMG_PATH: &str = "./day8/part2-output.png";
 
 const BLACK: u32 = 0;
 const WHITE: u32 = 1;
-const TRANSPARENT:u32 = 2;
+const TRANSPARENT: u32 = 2;
 
 fn main() {
     let image_data = INPUT.parse();
@@ -52,7 +52,10 @@ struct RawData<'a> {
 
 impl RawData<'_> {
     fn parse(&self) -> ImageData {
-        let parsed_data: Vec<u32> = self.data.trim().chars()
+        let parsed_data: Vec<u32> = self
+            .data
+            .trim()
+            .chars()
             .map(|c| c.to_digit(10))
             .map(|o| o.unwrap())
             .collect();
@@ -77,13 +80,15 @@ impl ImageData {
     fn decode(&self) -> Vec<u32> {
         let mut decoded_image = vec![TRANSPARENT; self.width * self.height];
 
-        self.data.chunks(self.width * self.height).for_each(|layer| {
-            for (i, layer_color) in layer.iter().enumerate() {
-                if decoded_image[i] == TRANSPARENT {
-                    decoded_image[i] = *layer_color;
+        self.data
+            .chunks(self.width * self.height)
+            .for_each(|layer| {
+                for (i, layer_color) in layer.iter().enumerate() {
+                    if decoded_image[i] == TRANSPARENT {
+                        decoded_image[i] = *layer_color;
+                    }
                 }
-            };
-        });
+            });
 
         decoded_image
     }
@@ -96,7 +101,7 @@ impl ImageData {
             *pixel = match decoded[(y * self.width as u32 + x) as usize] {
                 WHITE => image::Rgb([255, 255, 255]),
                 BLACK => image::Rgb([0, 0, 0]),
-                _ => panic!("Bad image: output has transparent pixel")
+                _ => panic!("Bad image: output has transparent pixel"),
             };
         }
         img_buf.save(png_output_path)
