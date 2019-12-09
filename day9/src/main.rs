@@ -11,13 +11,14 @@ fn main() {
     env_logger::Builder::new()
         .filter_level(log::LevelFilter::Debug)
         .init();
-    day9_part1()
+    run_day9(2)
 }
 
-fn day9_part1() {
+fn run_day9(input_code: i64) {
     let mut program = IntcodeProgram::init_from(INPUT);
-    program.buffer_input(1);
+    program.buffer_input(input_code);
 
+    // TODO: Move this output loop into the program and read from output buffer at the end.
     loop {
         let result = program.run();
         match result {
