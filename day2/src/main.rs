@@ -1,6 +1,6 @@
 extern crate intcode;
 
-use intcode::{parse_intcode_input, IntcodeProgram, IntcodeResult};
+use intcode::{parse_intcode_input, IntcodeProgram};
 
 const INPUT: &str = include_str!("../day2.txt");
 const NOUN: i64 = 12;
@@ -35,23 +35,21 @@ fn calc_day2(noun: i64, verb: i64) -> i64 {
     memory[2] = verb;
 
     let mut intcode = IntcodeProgram::init(&memory, Default::default());
-    match intcode.run() {
-        IntcodeResult::Halted => {
-            return intcode.mem_value(0);
-        }
-        x => panic!("Unexpected intcode result: {:?}", x),
+    intcode.run();
+    if !intcode.is_halted() {
+        panic!("Intcode program did not halt")
     }
+    return intcode.mem_value(0);
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{calc_day2, day2_pt2, NOUN, VERB};
-    use intcode::{parse_intcode_input, IntcodeProgram};
+    use intcode::IntcodeProgram;
 
     #[test]
     fn test_simple1() {
-        let memory = parse_intcode_input("1,0,0,0,99");
-        let mut intcode = IntcodeProgram::init(&memory, Default::default());
+        let mut intcode = IntcodeProgram::init_from("1,0,0,0,99");
         intcode.run();
         assert_eq!(intcode.mem_value(0), 2);
     }

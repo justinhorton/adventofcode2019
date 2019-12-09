@@ -7,25 +7,27 @@ use std::fmt::{Display, Formatter};
 pub struct IntcodeProgram {
     memory: Vec<i64>,
     input_buf: VecDeque<i64>,
+    output_buf: Vec<i64>,
     pc: usize,
     relative_base: i64,
+    is_halted: bool,
 }
 
 const MAX_INTCODE_SIZE: usize = 32 * 1024; // 32KB should be enough for anyone...
 
 impl IntcodeProgram {
     pub fn init(memory: &Vec<i64>, inputs: Vec<i64>) -> IntcodeProgram {
+        // allow MAX_INTCODE_SIZE memory space, initalized to 0
         let mut program_memory = vec![0; MAX_INTCODE_SIZE];
-        let mut i = 0;
-        for b in memory {
-            program_memory[i] = *b;
-            i += 1;
-        }
+        program_memory[..memory.len()].clone_from_slice(&memory[..]);
+
         IntcodeProgram {
             memory: program_memory,
             input_buf: VecDeque::from(inputs),
+            output_buf: Vec::new(),
             pc: 0,
             relative_base: 0,
+            is_halted: false,
         }
     }
 
@@ -34,9 +36,10 @@ impl IntcodeProgram {
         Self::init(&parsed, Default::default())
     }
 
-    pub fn run(&mut self) -> IntcodeResult {
+    pub fn run(&mut self) {
         debug!("Resuming with PC: {}", self.pc);
 
+        // instruction loop: continue until blocking to wait for input or the program halts
         loop {
             let instruction = destructure_inst(self.memory[self.pc]);
             debug!(
@@ -45,11 +48,13 @@ impl IntcodeProgram {
             );
             match instruction {
                 Ok(inst) => {
+                    // TODO: Clean up the operation/instruction separation (or remove it...) and
+                    //   add back verbose debug logging for execution values.
                     let operation = inst.as_operation(self.pc, self.relative_base, &self.memory);
                     let result = self.apply(&operation);
                     match result {
-                        IntcodeResult::AdvanceInstruction => {}
-                        _ => return result,
+                        IntcodeResult::AwaitingInput | IntcodeResult::Halted => return,
+                        IntcodeResult::ExecutedInstruction => {}
                     }
                 }
                 Err(e) => panic!(format!("Aborting, invalid opcode: {:?}", e)),
@@ -58,115 +63,103 @@ impl IntcodeProgram {
     }
 
     fn apply(&mut self, operation: &Operation) -> IntcodeResult {
-        let mut r: [usize; 3] = [MAX_INTCODE_SIZE + 1; 3]; // init with default that will throw out
-                                                           // of bounds if we access the wrong input...can do this more cleanly
+        // init with default that will throw out of bounds if we access the wrong input
+        // TODO: do this more cleanly
+        let mut r: [usize; 3] = [MAX_INTCODE_SIZE + 1; 3];
+
         for i in 0..operation.op.num_parameters() {
             r[i] = operation.slots[i].unwrap() as usize;
         }
 
         match operation.op {
             Op::Add => {
-                let result = self.memory[r[0]] + self.memory[r[1]];
-                self.store(r[2] as usize, result);
-
-                //                debug!("ADD {} {} = {} -> {}", r0, r1, result, r2);
+                self.store(r[2] as usize, self.memory[r[0]] + self.memory[r[1]]);
                 self.inc_pc(4);
             }
             Op::Mul => {
-                let result = self.memory[r[0]] * self.memory[r[1]];
-                self.store(r[2] as usize, result);
-                //                debug!("MUL {} {} = {}  -> {}", r0, r1, result, store);
+                self.store(r[2] as usize, self.memory[r[0]] * self.memory[r[1]]);
                 self.inc_pc(4);
             }
             Op::Input => match self.consume_input() {
                 Some(value) => {
                     self.store(r[0] as usize, value);
-                    //                    debug!("INPUT: {} -> {}", value, store);
                     self.inc_pc(2);
                 }
-                None => return IntcodeResult::AwaitingInput { pc: self.pc },
+                None => return IntcodeResult::AwaitingInput,
             },
             Op::Output => {
-                //                debug!("Resolved output: {}", output);
-                //                debug!("Parameter: {}", self.pc + 1);
-                //                debug!("OUTPUT: {}", output);
                 let output = self.memory[r[0]];
+                self.buffer_output(output);
                 self.inc_pc(2);
-                return IntcodeResult::Output { output };
             }
             Op::Jit => {
                 let pc = if self.memory[r[0]] != 0 {
                     let new_pc = self.memory[r[1]] as usize;
-                    //                    debug!("JIT {} (pass): PC <-- {}", r0, new_pc);
                     new_pc
                 } else {
-                    //                    debug!("JIT {} (fail): PC <-- {}", r0, self.pc + 3);
                     self.pc + 3
                 };
-                self.set_pc(pc);
+                self.pc = pc;
             }
             Op::Jif => {
-                //                let r0 = operation.r0();
                 let pc = if self.memory[r[0]] == 0 {
-                    let new_pc = self.memory[r[1]] as usize;
-                    //                    debug!("JIF {} (pass): PC <-- {}", r0, new_pc);
-                    new_pc
+                    self.memory[r[1]] as usize
                 } else {
-                    //                    debug!("JIF {} (fail): PC <-- {}", r0, self.pc + 3);
                     self.pc + 3
                 };
-                self.set_pc(pc);
+                self.pc = pc;
             }
             Op::Lt => {
                 let r0 = self.memory[r[0]];
                 let r1 = self.memory[r[1]];
-                let store = r[2] as usize;
-
-                let result = if r0 < r1 { 1 } else { 0 };
-
-                self.store(store, result);
-                //                debug!("LT {}, {} = {} -> {}", r0, r1, result, store);
+                self.store(r[2] as usize, if r0 < r1 { 1 } else { 0 });
                 self.inc_pc(4);
             }
             Op::Eq => {
                 let r0 = self.memory[r[0]];
                 let r1 = self.memory[r[1]];
-                let store = r[2] as usize;
-                let result = if r0 == r1 { 1 } else { 0 };
-
-                self.store(store, result);
-                //                debug!("LT {}, {} = {} -> {}", r0, r1, result, store);
+                self.store(r[2] as usize, if r0 == r1 { 1 } else { 0 });
                 self.inc_pc(4);
             }
             Op::RelBaseOffset => {
-                let r0 = self.memory[r[0]];
-                self.relative_base = self.relative_base + r0;
-                //                debug!("RBO {} (from {}) = {}", r0, self.pc + 1, self.relative_base);
+                self.relative_base = self.relative_base + self.memory[r[0]];
                 self.inc_pc(2);
             }
-            Op::Halt => return IntcodeResult::Halted,
+            Op::Halt => {
+                self.is_halted = true;
+                return IntcodeResult::Halted;
+            }
         };
-        return IntcodeResult::AdvanceInstruction;
+
+        IntcodeResult::ExecutedInstruction
     }
 
     pub fn mem_value(&self, mem_i: usize) -> i64 {
         self.memory[mem_i]
     }
 
-    fn set_pc(&mut self, new_pc: usize) {
-        self.pc = new_pc
+    pub fn buffer_input(&mut self, input: i64) {
+        self.input_buf.push_back(input)
+    }
+
+    pub fn consume_output(&mut self) -> Option<i64> {
+        self.output_buf.pop()
+    }
+
+    pub fn is_halted(&self) -> bool {
+        self.is_halted
     }
 
     fn inc_pc(&mut self, inc: usize) {
         self.pc += inc;
     }
 
-    pub fn buffer_input(&mut self, input: i64) {
-        self.input_buf.push_back(input)
-    }
-
     fn consume_input(&mut self) -> Option<i64> {
         self.input_buf.pop_front()
+    }
+
+    fn buffer_output(&mut self, output: i64) {
+        self.output_buf.push(output)
     }
 
     fn store(&mut self, location: usize, value: i64) {
@@ -175,11 +168,10 @@ impl IntcodeProgram {
 }
 
 #[derive(Debug)]
-pub enum IntcodeResult {
-    Output { output: i64 },
-    AwaitingInput { pc: usize },
-    AdvanceInstruction,
+enum IntcodeResult {
+    AwaitingInput,
     Halted,
+    ExecutedInstruction,
 }
 
 fn destructure_inst(inst: i64) -> std::result::Result<Instruction, InvalidOpCodeError> {
@@ -211,26 +203,9 @@ fn get_parameter_mem_slot(
         let parm_slot = pc + parm_index + 1;
         let mode = inst.addr_modes.get(parm_index);
         mode.map(|m| match m {
-            AddressingMode::Immediate => {
-                //                let p = memory[parm_slot];
-                //                debug!("p: {} from m[{}]", p, parm_slot);
-                parm_slot as i64
-            }
-            AddressingMode::Position => {
-                let pos = memory[parm_slot];
-                pos
-                //                let p = memory[pos as usize];
-                //                debug!("p: {} from m[m[{}]] = m[{}]", p, parm_slot, pos);
-                //                p
-            }
-            AddressingMode::Relative => {
-                let i = memory[parm_slot];
-                let pos = i + relative_base;
-                pos
-                //                let p = memory[pos as usize];
-                //                debug!("p: {} from m[m[{}]] = m[{} + {}] = m[{}]", p, parm_slot, i, relative_base, pos);
-                //                p
-            }
+            AddressingMode::Immediate => parm_slot as i64,
+            AddressingMode::Position => memory[parm_slot],
+            AddressingMode::Relative => memory[parm_slot] + relative_base,
         })
     }
 }
@@ -273,16 +248,6 @@ enum Op {
     Halt,
 }
 
-/*
-    Opcode 1 adds together numbers read from two positions and stores the result in a third position.
-    Opcode 2 works exactly like opcode 1, except it multiplies the two inputs instead of adding them.
-    Opcode 3 takes a single integer as input and saves it to the position given by its only parameter.
-    Opcode 4 outputs the value of its only parameter. For example, the instruction 4,50 would output the value at address 50.
-    Opcode 5 is jump-if-true: if the first parameter is non-zero, it sets the instruction pointer to the value from the second parameter. Otherwise, it does nothing.
-    Opcode 6 is jump-if-false: if the first parameter is zero, it sets the instruction pointer to the value from the second parameter. Otherwise, it does nothing.
-    Opcode 7 is less than: if the first parameter is less than the second parameter, it stores 1 in the position given by the third parameter. Otherwise, it stores 0.
-    Opcode 8 is equals: if the first parameter is equal to the second parameter, it stores 1 in the position given by the third parameter. Otherwise, it stores 0.
-*/
 impl Op {
     fn from_opcode(opcode: i8) -> Result<Op, InvalidOpCodeError> {
         let op = match opcode {
@@ -364,7 +329,7 @@ fn digits(num: i64) -> VecDeque<i8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{destructure_inst, AddressingMode, IntcodeProgram, IntcodeResult, Op};
+    use crate::{destructure_inst, AddressingMode, IntcodeProgram, Op};
 
     #[test]
     fn test_parse_relative_mode() {
@@ -399,42 +364,30 @@ mod tests {
     fn test_run_rel_base_ex1() {
         let intcode = "109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99";
         let mut program = IntcodeProgram::init_from(intcode);
-        let mut out_buf = String::new();
-        while let IntcodeResult::Output { output: o } = program.run() {
-            out_buf.push_str(format!("{},", o).as_str());
-        }
-        out_buf.remove(out_buf.len() - 1);
-        assert_eq!(out_buf, intcode);
+        program.run();
+        assert_eq!(
+            program.output_buf,
+            vec![109, 1, 204, -1, 1001, 100, 1, 100, 1008, 100, 16, 101, 1006, 101, 0, 99]
+        );
     }
 
     #[test]
     fn test_run_rel_base_ex2() {
         let intcode = "1102,34915192,34915192,7,4,7,99,0";
         let mut program = IntcodeProgram::init_from(intcode);
-        let mut out_buf = String::new();
-        while let IntcodeResult::Output { output: o } = program.run() {
-            out_buf.push_str(format!("{}", o).as_str());
-        }
-        assert_eq!(out_buf.len(), 16)
+        program.run();
+        assert_eq!(program.output_buf.len(), 1);
+        let output = program.consume_output().unwrap();
+        assert_eq!(output.to_string().len(), 16)
     }
 
     #[test]
     fn test_run_rel_base_ex3() {
         let intcode = "104,1125899906842624,99";
         let mut program = IntcodeProgram::init_from(intcode);
-        let mut out_buf = String::new();
-        while let IntcodeResult::Output { output: o } = program.run() {
-            out_buf.push_str(format!("{}", o).as_str());
-        }
-        assert_eq!(out_buf, "1125899906842624")
-    }
-
-    #[test]
-    fn test_destructure_inst() {
-        let inst = 203;
-        let x = destructure_inst(inst);
-        assert!(x.is_ok());
-        println!("{:?}", x.unwrap());
+        let expected = [program.memory[1]];
+        program.run();
+        assert_eq!(program.output_buf, expected)
     }
 
     #[test]
@@ -447,12 +400,8 @@ mod tests {
         let mut program = IntcodeProgram::init_from("109,19,204,-34,99");
         program.relative_base = rel_base;
         program.memory[1985] = 1111;
-        let result = program.run();
-        let out = match result {
-            IntcodeResult::Output { output: o } => o,
-            _ => panic!(),
-        };
-        assert_eq!(out, 1111);
+        program.run();
+        assert_eq!(program.consume_output().unwrap(), 1111);
     }
 
     #[test]
@@ -460,8 +409,10 @@ mod tests {
         let instr = 203;
         let x = destructure_inst(instr);
         assert!(x.is_ok());
+
         let result = x.unwrap();
         assert_eq!(result.op, Op::Input);
+
         let addr_mode = result.addr_modes.get(0);
         assert!(addr_mode.is_some());
         assert_eq!(*addr_mode.unwrap(), AddressingMode::Relative);

@@ -1,7 +1,9 @@
 extern crate intcode;
+extern crate log;
 extern crate permutate;
 
-use intcode::{parse_intcode_input, IntcodeProgram, IntcodeResult};
+use intcode::{parse_intcode_input, IntcodeProgram};
+use log::debug;
 use permutate::Permutator;
 use std::cmp::max;
 
@@ -53,32 +55,35 @@ fn run_all_amplifiers(start_memory: &Vec<i64>, phases: &Vec<&i64>, with_feedback
     }
 
     let mut last_output = None;
-    loop {
-        for amp_i in 0..5 {
-            let amp_process = &mut intcode_amps[amp_i];
-
-            match amp_process.run() {
-                IntcodeResult::AwaitingInput { pc: paused_pc } => {
-                    println!("Amp {} awaiting input at {}", amp_i, paused_pc);
-                }
-                IntcodeResult::Output { output: o } => {
-                    last_output = Some(o);
-                    intcode_amps[(amp_i + 1) % 5].buffer_input(o);
-                }
-                IntcodeResult::Halted => {
-                    println!("Amp {} halted", amp_i);
-                    if amp_i == 4 {
-                        return last_output.expect("Something went wrong; no output to return");
-                    }
-                }
-                _ => {}
-            };
+    return if with_feedback {
+        while let Some(output) = run_single_amp_loop(&mut intcode_amps) {
+            last_output = Some(output);
         }
+        last_output.expect("No output from feedback loop")
+    } else {
+        run_single_amp_loop(&mut intcode_amps).expect("No output from loop")
+    };
+}
 
-        if !with_feedback {
-            return last_output.expect("Something went wrong; no output to return");
+fn run_single_amp_loop(intcode_amps: &mut Vec<IntcodeProgram>) -> Option<i64> {
+    let mut last_output = None;
+
+    for amp_i in 0..5 {
+        let amp_program = &mut intcode_amps[amp_i];
+        amp_program.run();
+        match amp_program.consume_output() {
+            Some(amp_output) => {
+                let next_amp_i = (amp_i + 1) % 5;
+
+                intcode_amps[next_amp_i].buffer_input(amp_output);
+                debug!("Amp {}: {} -> Amp {}", amp_i, amp_output, next_amp_i);
+                last_output = Some(amp_output);
+            }
+            None => {}
         }
     }
+
+    last_output
 }
 
 fn next_non_repeating<'a>(
