@@ -77,8 +77,9 @@ impl Robot {
         self.orientation = self.orientation.change(input);
         debug!("{}: Turning {:?}", input, self.orientation);
         match self.orientation {
-            Up => self.location.y += 1,
-            Down => self.location.y -= 1,
+            // (0, 0) is upper left corner
+            Up => self.location.y -= 1,
+            Down => self.location.y += 1,
             Right => self.location.x += 1,
             Left => self.location.x -= 1,
         };
@@ -116,10 +117,10 @@ impl Robot {
         let mut img_buf = image::ImageBuffer::new(width, height);
 
         for (point, color) in &self.panels {
-            // the robot drew into negative coordinates, mirror the pixels
-            let x = i32::abs(point.x) as u32;
-            let y = i32::abs(point.y) as u32;
-            let pixel = img_buf.get_pixel_mut(x, y);
+            // adjust the coords to give min pixel at (0, 0) if necessary
+            let pix_x = shift_origin(point.x, min_x);
+            let pix_y = shift_origin(point.y, min_y);
+            let pixel = img_buf.get_pixel_mut(pix_x, pix_y);
 
             *pixel = match color {
                 PanelColor::White => image::Rgb([255, 255, 255]),
@@ -154,6 +155,10 @@ impl Orientation {
 struct Point {
     x: i32,
     y: i32,
+}
+
+fn shift_origin(c: i32, min_c: i32) -> u32 {
+    (if min_c < 0 { c + min_c * -1 } else { c }) as u32
 }
 
 #[derive(Debug)]
