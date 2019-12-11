@@ -7,10 +7,11 @@ use std::fmt::{Display, Formatter};
 pub struct IntcodeProgram {
     memory: Vec<i64>,
     input_buf: VecDeque<i64>,
-    output_buf: Vec<i64>,
+    output_buf: VecDeque<i64>,
     pc: usize,
     relative_base: i64,
     is_halted: bool,
+    is_awaiting_input: bool,
 }
 
 const MAX_INTCODE_SIZE: usize = 32 * 1024; // 32KB should be enough for anyone...
@@ -24,10 +25,11 @@ impl IntcodeProgram {
         IntcodeProgram {
             memory: program_memory,
             input_buf: VecDeque::from(inputs),
-            output_buf: Vec::new(),
+            output_buf: VecDeque::new(),
             pc: 0,
             relative_base: 0,
             is_halted: false,
+            is_awaiting_input: false,
         }
     }
 
@@ -36,6 +38,7 @@ impl IntcodeProgram {
         Self::init(&parsed, Default::default())
     }
 
+    // TODO: Improve running w.r.t. halting, blocking for input, etc.
     pub fn run(&mut self) {
         debug!("Resuming with PC: {}", self.pc);
 
@@ -82,13 +85,20 @@ impl IntcodeProgram {
             }
             Op::Input => match self.consume_input() {
                 Some(value) => {
+                    debug!("INPUT << {}", value);
+                    self.is_awaiting_input = false;
                     self.store(r[0] as usize, value);
                     self.inc_pc(2);
                 }
-                None => return IntcodeResult::AwaitingInput,
+                None => {
+                    debug!("Waiting for INPUT...");
+                    self.is_awaiting_input = true;
+                    return IntcodeResult::AwaitingInput;
+                }
             },
             Op::Output => {
                 let output = self.memory[r[0]];
+                debug!("OUTPUT >> {}", output);
                 self.buffer_output(output);
                 self.inc_pc(2);
             }
@@ -142,8 +152,12 @@ impl IntcodeProgram {
         self.input_buf.push_back(input)
     }
 
+    pub fn is_awaiting_input(&self) -> bool {
+        self.is_awaiting_input
+    }
+
     pub fn consume_output(&mut self) -> Option<i64> {
-        self.output_buf.pop()
+        self.output_buf.pop_front()
     }
 
     pub fn is_halted(&self) -> bool {
@@ -159,7 +173,7 @@ impl IntcodeProgram {
     }
 
     fn buffer_output(&mut self, output: i64) {
-        self.output_buf.push(output)
+        self.output_buf.push_back(output)
     }
 
     fn store(&mut self, location: usize, value: i64) {
