@@ -1,10 +1,10 @@
-extern crate image;
-
 use crate::Orientation::{Down, Left, Right, Up};
 use intcode::IntcodeProgram;
 use log::debug;
 use std::collections::HashMap;
-use std::io::Error;
+use std::fs::File;
+use std::io;
+use std::io::Write;
 
 const ROBOT_PROGRAM: &str = include_str!("../day11.txt");
 
@@ -14,7 +14,7 @@ const WHITE: i64 = 1;
 const DO_TURN_LEFT: i64 = 0;
 const DO_TURN_RIGHT: i64 = 1;
 
-const PT2_IMG_PATH: &str = "./day11/part2-output.png";
+const PT2_IMG_PATH: &str = "./day11/part2-output.pbm";
 
 fn main() {
     println!("Day 11-1: Panels painted at least once: {}", day11_part1());
@@ -26,8 +26,8 @@ fn day11_part1() -> usize {
 }
 
 fn day11_part2() {
-    let r = run_robot(PanelColor::White).save_image(PT2_IMG_PATH);
-    match r {
+    let robot = run_robot(PanelColor::White);
+    match robot.save_image(PT2_IMG_PATH) {
         Ok(_) => println!("Day 11-2: Saved image to '{}'", PT2_IMG_PATH),
         Err(_) => println!("Day 11-2: Failed to save image!"),
     }
@@ -106,28 +106,37 @@ impl Robot {
         self.panels.keys().len()
     }
 
-    fn save_image(&self, png_output_path: &str) -> Result<(), Error> {
+    fn save_image(&self, output_pbm: &str) -> io::Result<()> {
         let min_x = self.panels.keys().map(|p| p.x).min().unwrap();
         let max_x = self.panels.keys().map(|p| p.x).max().unwrap();
         let min_y = self.panels.keys().map(|p| p.y).min().unwrap();
         let max_y = self.panels.keys().map(|p| p.y).max().unwrap();
 
-        let height = (max_y - min_y + 1) as u32;
-        let width = (max_x - min_x + 1) as u32;
-        let mut img_buf = image::ImageBuffer::new(width, height);
+        let height = (max_y - min_y + 1) as usize;
+        let width = (max_x - min_x + 1) as usize;
 
+        let mut out: Vec<Vec<char>> = vec![vec!['0'; width]; height];
         for (point, color) in &self.panels {
-            // adjust the coords to give min pixel at (0, 0) if necessary
-            let pix_x = shift_origin(point.x, min_x);
-            let pix_y = shift_origin(point.y, min_y);
-            let pixel = img_buf.get_pixel_mut(pix_x, pix_y);
-
-            *pixel = match color {
-                PanelColor::White => image::Rgb([255, 255, 255]),
-                PanelColor::Black => image::Rgb([0, 0, 0]),
+            if let PanelColor::White = color {
+                let pix_x = shift_origin(point.x, min_x);
+                let pix_y = shift_origin(point.y, min_y);
+                out[pix_y][pix_x] = '1'
             }
         }
-        img_buf.save(png_output_path)
+
+        let mut f = File::create(output_pbm)?;
+
+        let mut buf = String::new();
+        buf.push_str(format!("P1\n{} {}\n", width, height).as_str());
+        let mut p = 0;
+        out.iter().flatten().for_each(|it| {
+            buf.push(*it);
+            p += 1;
+            buf.push(if p % width == 0 { '\n' } else { ' ' });
+        });
+        f.write(buf.as_bytes())?;
+
+        Ok(())
     }
 }
 
@@ -157,8 +166,8 @@ struct Point {
     y: i32,
 }
 
-fn shift_origin(c: i32, min_c: i32) -> u32 {
-    (if min_c < 0 { c + min_c * -1 } else { c }) as u32
+fn shift_origin(c: i32, min_c: i32) -> usize {
+    (if min_c < 0 { c + min_c * -1 } else { c }) as usize
 }
 
 #[derive(Debug)]

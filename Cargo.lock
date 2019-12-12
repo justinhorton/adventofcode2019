@@ -112,7 +112,6 @@ name = "day11"
 version = "0.1.0"
 dependencies = [
  "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "image 0.22.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "intcode 0.1.0",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
