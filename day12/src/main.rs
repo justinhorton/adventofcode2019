@@ -7,7 +7,7 @@ const INPUT: &str = include_str!("../day12.txt");
 
 fn main() {
     println!("Day 12-1: {:?}", day12_part1());
-    println!("{:?}", day12_part2());
+    println!("Day 12-2: {:?}", day12_part2());
 }
 
 fn day12_part1() -> i32 {

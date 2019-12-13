@@ -4,6 +4,7 @@ use log::debug;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 
+#[derive(Clone)]
 pub struct IntcodeProgram {
     memory: Vec<i64>,
     input_buf: VecDeque<i64>,
@@ -17,6 +18,10 @@ pub struct IntcodeProgram {
 const MAX_INTCODE_SIZE: usize = 32 * 1024; // 32KB should be enough for anyone...
 
 impl IntcodeProgram {
+    pub fn set_pc(&mut self, new_pc: usize) {
+        self.pc = new_pc;
+    }
+
     pub fn init(memory: &Vec<i64>, inputs: Vec<i64>) -> IntcodeProgram {
         // allow MAX_INTCODE_SIZE memory space, initalized to 0
         let mut program_memory = vec![0; MAX_INTCODE_SIZE];
@@ -76,19 +81,28 @@ impl IntcodeProgram {
 
         match operation.op {
             Op::Add => {
-                self.store(r[2] as usize, self.memory[r[0]] + self.memory[r[1]]);
+                self.store(r[2], self.memory[r[0]] + self.memory[r[1]]);
                 self.inc_pc(4);
             }
             Op::Mul => {
-                self.store(r[2] as usize, self.memory[r[0]] * self.memory[r[1]]);
+                let dst = r[2];
+                let r1 = self.memory[r[0]];
+                let r2 = self.memory[r[1]];
+
+                self.store(dst, r1 * r2);
                 self.inc_pc(4);
+
+                debug!("+ MUL {}, {} -> m[{}]", dst, r1, r2);
             }
             Op::Input => match self.consume_input() {
                 Some(value) => {
-                    debug!("INPUT << {}", value);
+                    let dst = r[0];
                     self.is_awaiting_input = false;
-                    self.store(r[0] as usize, value);
+
+                    self.store(dst, value);
                     self.inc_pc(2);
+
+                    debug!("<< INPUT {} -> m[{}]", value, dst);
                 }
                 None => {
                     debug!("Waiting for INPUT...");
@@ -97,46 +111,68 @@ impl IntcodeProgram {
                 }
             },
             Op::Output => {
-                let output = self.memory[r[0]];
-                debug!("OUTPUT >> {}", output);
+                let dst = r[0];
+                let output = self.memory[dst];
+
+                debug!(">> OUTPUT m[{}] >> {}", dst, output);
+
                 self.buffer_output(output);
                 self.inc_pc(2);
             }
             Op::Jit => {
-                let pc = if self.memory[r[0]] != 0 {
+                let pred = self.memory[r[0]];
+                let pc = if pred != 0 {
                     let new_pc = self.memory[r[1]] as usize;
+                    debug!("+ JIT {}...pass -> pc={}", pred, new_pc);
                     new_pc
                 } else {
+                    debug!("+ JIT {}...fail", pred);
                     self.pc + 3
                 };
                 self.pc = pc;
             }
             Op::Jif => {
-                let pc = if self.memory[r[0]] == 0 {
-                    self.memory[r[1]] as usize
+                let pred = self.memory[r[0]];
+                let pc = if pred == 0 {
+                    let new_pc = self.memory[r[1]] as usize;
+                    debug!("+ JIF {}...pass -> pc={}", pred, new_pc);
+                    new_pc
                 } else {
+                    debug!("+ JIF {}...fail", pred);
                     self.pc + 3
                 };
                 self.pc = pc;
             }
             Op::Lt => {
+                // TODO: Show addressing modes properly for debug output
+                debug!("+ LT m[{}], m[{}]", r[0], r[1]);
                 let r0 = self.memory[r[0]];
                 let r1 = self.memory[r[1]];
-                self.store(r[2] as usize, if r0 < r1 { 1 } else { 0 });
+                let dst = r[2];
+                let result = if r0 < r1 { 1 } else { 0 };
+
+                self.store(dst, result);
                 self.inc_pc(4);
+                debug!("++ LT {}, {} -> m[{}]", r0, r1, dst);
             }
             Op::Eq => {
                 let r0 = self.memory[r[0]];
                 let r1 = self.memory[r[1]];
-                self.store(r[2] as usize, if r0 == r1 { 1 } else { 0 });
+                let dst = r[2];
+                let result = if r0 == r1 { 1 } else { 0 };
+
+                self.store(dst, result);
                 self.inc_pc(4);
+                debug!("+ LT {}, {} -> m[{}]", r0, r1, dst);
             }
             Op::RelBaseOffset => {
                 self.relative_base = self.relative_base + self.memory[r[0]];
                 self.inc_pc(2);
+                debug!("+ SETRB {}", self.relative_base);
             }
             Op::Halt => {
                 self.is_halted = true;
+                debug!("+ HALT");
                 return IntcodeResult::Halted;
             }
         };
