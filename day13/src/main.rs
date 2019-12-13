@@ -45,12 +45,13 @@ fn run_game(headless: bool, cheat_to_win: bool) -> (i64, i64) {
         // And since we're modifying memory to play for free, anyway...
         //
         // There's one instruction each loop to check whether the ball's y coordinate is past the
-        // bottom of the screen. Hack the program to ensure that comparison is never true.
+        // bottom of the screen. Hack the program to pretend that it never is:
         //
         // memory[365..=368] = 1007,389,23,381 => LT m[389], 23 -> m[381]
-        // If we store 0 in memory[381] each time this comparison executes, the game continues until
-        // the win condition, without any need to move the paddle.
-        // becomes... 1107,0,23, => LT 0,23,381 = 1 -> m[381]
+        // >> change to........1107,0,23,381   => LT 0, 23 -> m[381] => 1 -> m[381]
+        //
+        // If we store 0 in memory[381] each time this comparison executes, the game ignores the
+        // paddle position until we reach the win condition.
         memory[365] = 1107;
         memory[366] = 0;
     }
