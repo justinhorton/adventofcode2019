@@ -12,8 +12,7 @@ fn main() {
 }
 
 fn part1(input: &str) -> u64 {
-    let (_, fuel) = parse_input(input).calc_multipliers_and_ore_for_one_fuel();
-    fuel
+    parse_input(input).calc_ore_for_n_fuel(1)
 }
 
 fn part2(input: &str) -> u64 {
@@ -31,65 +30,42 @@ impl SystemOfEquations {
             .insert(equation.output.id.clone(), equation);
     }
 
-    fn calc_multipliers_and_ore_for_one_fuel(&self) -> (HashMap<String, u64>, u64) {
-        //2 AB, 3 A => 1 FUEL
+    fn calc_ore_for_n_fuel(&self, n: u64) -> u64 {
         let mut available: HashMap<String, u64> = HashMap::new();
-        let mut mult_counts: HashMap<String, u64> = HashMap::new();
         let mut ore_used: u64 = 0;
 
         let fuel_eq = self.equations_by_output.get("FUEL").unwrap();
-        self.calc_ore_inner(
-            fuel_eq.output.id.clone(),
-            fuel_eq.output.quantity,
-            &mut available,
-            &mut mult_counts,
-            &mut ore_used,
-        );
-        (mult_counts, ore_used)
+        self.calc_ore_inner(fuel_eq.output.id.clone(), n, &mut available, &mut ore_used);
+        ore_used
     }
 
     fn calc_fuel_produced_by_avail_ore(&mut self, ore_avail: u64) -> u64 {
-        // calculate the fuel like in part 1 to get the multipliers needed to produce 1 FUEL
-        let (mult_counts, ore_per_fuel) = self.calc_multipliers_and_ore_for_one_fuel();
+        // generally, we can produce between 1 fuel and at most 1 per ore...could tighten the lower
+        // bound, but that's pretty pointless if we're binary searching anyway
+        let mut max_fuel = 1;
+        self.bin_search_max_fuel(1, ore_avail, ore_avail, &mut max_fuel);
+        max_fuel
+    }
 
-        // modify the system with those multipliers
-        for (output_id, count) in mult_counts.iter() {
-            self.equations_by_output
-                .entry(output_id.to_string())
-                .and_modify(|e| e.multiplier = *count);
+    fn bin_search_max_fuel(
+        &mut self,
+        fuel_lower_bound: u64,
+        fuel_upper_bound: u64,
+        ore_avail: u64,
+        cur_max: &mut u64,
+    ) {
+        if fuel_upper_bound < fuel_lower_bound {
+            return;
         }
 
-        let mut available: HashMap<String, u64> = HashMap::new();
-        let mut _multiplier_counts = &mut HashMap::new();
-        let mut ore_used = 0;
-
-        // can produce at least fuel = the amount of ore divided by the ore needed per fuel, but
-        //   more than that due to partial consumption of inputs
-        let at_least_fuel = ore_avail / ore_per_fuel;
-        let fuel_eq = self.equations_by_output.get("FUEL").unwrap();
-        self.calc_ore_inner(
-            fuel_eq.output.id.clone(),
-            at_least_fuel,
-            &mut available,
-            &mut HashMap::new(),
-            &mut ore_used,
-        );
-
-        // brute force from there: produce 1 more fuel until ore is exhausted
-        // TODO: Do this in a way that doesn't take minutes with level 3 optimization enabled...
-        let mut fuel: u64 = at_least_fuel;
-        while ore_used <= ore_avail {
-            self.calc_ore_inner(
-                fuel_eq.output.id.clone(),
-                1,
-                &mut available,
-                _multiplier_counts,
-                &mut ore_used,
-            );
-            fuel += 1;
+        let cur_fuel = fuel_lower_bound + (fuel_upper_bound - fuel_lower_bound) / 2;
+        let ore_used = self.calc_ore_for_n_fuel(cur_fuel);
+        if ore_used > ore_avail {
+            self.bin_search_max_fuel(fuel_lower_bound, cur_fuel - 1, ore_avail, cur_max);
+        } else {
+            *cur_max = cur_fuel;
+            self.bin_search_max_fuel(cur_fuel + 1, fuel_upper_bound, ore_avail, cur_max);
         }
-        // the loop overshoots by 1
-        fuel - 1
     }
 
     fn calc_ore_inner(
@@ -97,7 +73,6 @@ impl SystemOfEquations {
         output_id: String,
         needed_quantity: u64,
         available: &mut HashMap<String, u64>,
-        multiplier_counts: &mut HashMap<String, u64>,
         ore_used: &mut u64,
     ) {
         let output_eq = self.equations_by_output.get(&output_id);
@@ -115,11 +90,6 @@ impl SystemOfEquations {
                     let remaining_needed = needed_quantity - available_quantity;
                     let multiplier = oe.multiplier_to_produce(remaining_needed);
 
-                    multiplier_counts
-                        .entry(output_id.clone())
-                        .and_modify(|e| *e += multiplier)
-                        .or_insert(multiplier);
-
                     let new_produced: u64 = oe.output.quantity * multiplier;
                     available.insert(
                         output_id.clone(),
@@ -132,7 +102,6 @@ impl SystemOfEquations {
                             input.id.clone(),
                             input.quantity * multiplier,
                             available,
-                            multiplier_counts,
                             ore_used,
                         )
                     });
@@ -312,7 +281,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // too slow...
     fn test_part2() {
         assert_eq!(part2(INPUT), 8845261);
     }
