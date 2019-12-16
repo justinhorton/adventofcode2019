@@ -123,10 +123,10 @@ impl IntcodeProgram {
                 let pred = self.memory[r[0]];
                 let pc = if pred != 0 {
                     let new_pc = self.memory[r[1]] as usize;
-                    debug!("+ JIT {}...pass -> pc={}", pred, new_pc);
+                    debug!("+ JIT m[{}]...pass -> pc={}", r[0], new_pc);
                     new_pc
                 } else {
-                    debug!("+ JIT {}...fail", pred);
+                    debug!("+ JIT m[{}]...fail", r[0]);
                     self.pc + 3
                 };
                 self.pc = pc;
@@ -135,10 +135,10 @@ impl IntcodeProgram {
                 let pred = self.memory[r[0]];
                 let pc = if pred == 0 {
                     let new_pc = self.memory[r[1]] as usize;
-                    debug!("+ JIF {}...pass -> pc={}", pred, new_pc);
+                    debug!("+ JIF m[{}]...pass -> pc={}", r[0], new_pc);
                     new_pc
                 } else {
-                    debug!("+ JIF {}...fail", pred);
+                    debug!("+ JIF m[{}]...fail", r[0]);
                     self.pc + 3
                 };
                 self.pc = pc;
