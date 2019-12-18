@@ -1,0 +1,12 @@
+[package]
+name = "day17"
+version = "0.1.0"
+authors = ["Justin Horton <18197817+justinhorton@users.noreply.github.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+intcode = { path = "../intcode" }
+env_logger = "0.7.1"
+log = "0.4.8"
