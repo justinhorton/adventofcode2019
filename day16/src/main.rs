@@ -56,10 +56,23 @@ fn part2(input: &str) -> String {
     // 7 digit offset at start
     let offset = (&input_repeated[..7]).parse::<usize>().unwrap();
 
-    // Because of the size of the offset, everything to the left is 0 and everything to the right is
-    // 1. Starting from the end of the input (call it index n), the transform of n is itself. The
-    // transform of n - 1 is (digit[n-1] + digit[n]) % 10, (digit[n-2] + digit[n-1]) % 10 and so on
-    // until we reach the start of the offset.
+    // The original input has 650 characters, making our repeated input 6,500,000 characters. With
+    // the given encoding, the n-th (1-indexed) 'phase' has 0 factors for (n-1) digits before it. It
+    // then repeats 1 factors for n more digits.
+    //
+    // The offset is 5,976,277, so our our first 'phase' is the 5,976,278th phase (1-indexed) or the
+    // one which starts its 1 factors on character 5,976,277 (0-indexed). Since the total length of
+    // the input is only 6,500,000, the only other factor that will appear in this first and the
+    // following 7 phases of interest is 1
+    //
+    // This simplifies the problem to a sum & modulo across the digits to the right of our offset.
+    // Starting from the end of the input (call it index n-1), we have the following at each of the
+    // 100 iterations of the FFT:
+    //
+    // digit[n-1] = digit[n-1]
+    // digit[n-2] = (digit[n-2] + digit[n-1]) % 10
+    // digit[n-3] = (digit[n-3] + digit[n-2]) % 10
+    // ... until the start of the offset
     let mut digits: Vec<u32> = (&input_repeated[offset..])
         .chars()
         .map(|c| c.to_digit(10).unwrap())
