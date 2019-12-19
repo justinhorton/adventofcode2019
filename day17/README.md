@@ -80,13 +80,15 @@ I didn't solve this programmatically. I used the following strategy on the above
 
 ### Routines
 
-A:    L,12,L,10,R,8,L,12
-B:    R,8,R,10,R,12
-C:    L,10,R,12,R,8
-Main: A,B,A,B,C,C,B,A,B,C
+| Routine      | Description         |
+| -----------  | -----------         |
+| A            | L,12,L,10,R,8,L,12  |
+| B            | L,10,R,12,R,8       |
+| Main         | A,B,A,B,C,C,B,A,B,C |
 
 ---
 
+```
 (L,12,L,10,R,8,L,12)A,
 
 (R,8,R,10,R,12)B,
@@ -106,3 +108,5 @@ Main: A,B,A,B,C,C,B,A,B,C
 (R,8,R,10,R,12)B,
 
 (L,10,R,12,R,8)C
+```
+
