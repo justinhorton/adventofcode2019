@@ -1,0 +1,27 @@
+north
+take polygon
+north
+take astrolabe
+south
+south
+west
+take hologram
+north
+east
+take space law space brochure
+west
+north
+take prime number
+south
+south
+east
+south
+east
+take weather machine
+west
+south
+take manifold
+west
+take mouse
+north
+north
