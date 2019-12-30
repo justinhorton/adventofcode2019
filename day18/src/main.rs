@@ -1,33 +1,78 @@
 use std::collections::{HashSet, VecDeque};
 
 const INPUT: &str = include_str!("../day18.txt");
+const INPUT_2_1: &str = include_str!("../day18-2-ul.txt");
+const INPUT_2_2: &str = include_str!("../day18-2-ur.txt");
+const INPUT_2_3: &str = include_str!("../day18-2-bl.txt");
+const INPUT_2_4: &str = include_str!("../day18-2-br.txt");
 
 fn main() {
-    println!("Day 18-1: Steps to all keys: {}", part1());
+    println!("Day 18-1: Steps to all keys: {}", part1(INPUT));
+    println!("Day 18-2: Steps to all keys: {}", part2());
 }
 
-fn part1() -> i32 {
-    steps_to_find_all_keys(INPUT, 26)
-}
-
-fn steps_to_find_all_keys(input: &str, num_keys: usize) -> i32 {
+fn part1(input: &str) -> i32 {
     let maze = Maze::create_from_input(input);
+    single_robot_steps_to_find_all_keys(&maze, 0)
+}
 
+// This solution doesn't work for the following example:
+//
+// #############
+// #g#f.D#..h#l#
+// #F###e#E###.#
+// #dCba@#@BcIJ#
+// #############
+// #nK.L@#@G...#
+// #M###N#H###.#
+// #o#m..#i#jk.#
+// #############
+//
+// This maze has a shortest path that at one point has a robot reaching a door and backtracking to
+// retrieve a key for a robot in another quadrant. The main input doesn't require that. It turns
+// out that for this input, we can treat the quadrants as four independent mazes. We assume that
+// when a robot 1 in quadrant 1 reaches a door whose key is not in its quadrant, the key will be
+// found by another robot X in quadrant X without requiring robot 1 to move to unblock the other
+// robot. This is equivalent to giving each robot the keys that exist in other quadrants.
+//
+// Turns out this gives the right answer, but is certainly an incorrect general solution.
+fn part2() -> i32 {
+    let mazes = [
+        Maze::create_from_input(INPUT_2_1),
+        Maze::create_from_input(INPUT_2_2),
+        Maze::create_from_input(INPUT_2_3),
+        Maze::create_from_input(INPUT_2_4),
+    ];
+
+    mazes
+        .iter()
+        .enumerate()
+        .map(|(maze_num, maze)| {
+            single_robot_steps_to_find_all_keys(maze, keys_from_others(maze_num, &mazes))
+        })
+        .sum()
+}
+
+fn keys_from_others(maze_num: usize, mazes: &[Maze; 4]) -> u32 {
+    mazes
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| maze_num != *i)
+        .fold(0, |acc: u32, (_, maze)| acc | maze.encoded_keys)
+}
+
+fn single_robot_steps_to_find_all_keys(maze: &Maze, start_keys: u32) -> i32 {
     let mut visited: HashSet<PositionWithKeys> = HashSet::new();
     let mut visit_queue: VecDeque<PositionWithKeys> = VecDeque::new();
-    visit_queue.push_back(PositionWithKeys::create_no_keys(
-        maze.start_pos.x,
-        maze.start_pos.y,
+    visit_queue.push_back(PositionWithKeys::create_with_keys(
+        maze.start_positions[0].x,
+        maze.start_positions[0].y,
+        start_keys,
+        None,
     ));
 
-    // goal has all key_id bits set (where key_id is 0-indexed based on the key's char in the maze)
-    let goal_encoded_keys = {
-        let mut k: u32 = 0;
-        for i in 0..num_keys {
-            k |= 1 << i as u32;
-        }
-        k
-    };
+    // goal is the keys we started with plus what's available in this maze
+    let goal_keys = start_keys | maze.encoded_keys;
 
     let mut num_steps = 0;
     while !visit_queue.is_empty() {
@@ -65,7 +110,7 @@ fn steps_to_find_all_keys(input: &str, num_keys: usize) -> i32 {
                     cur_pos_and_keys.encoded_keys,
                     new_key,
                 );
-                if next_pos_with_keys.is_goal(goal_encoded_keys) {
+                if next_pos_with_keys.is_goal(goal_keys) {
                     return num_steps;
                 }
 
@@ -89,14 +134,6 @@ struct PositionWithKeys {
 }
 
 impl PositionWithKeys {
-    fn create_no_keys(x: usize, y: usize) -> PositionWithKeys {
-        PositionWithKeys {
-            x,
-            y,
-            encoded_keys: 0,
-        }
-    }
-
     fn create_with_keys(
         x: usize,
         y: usize,
@@ -125,7 +162,8 @@ impl PositionWithKeys {
 
 struct Maze {
     cells: Vec<Vec<Tile>>,
-    start_pos: Position,
+    start_positions: Vec<Position>,
+    encoded_keys: u32,
 }
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
@@ -137,29 +175,32 @@ struct Position {
 impl Maze {
     fn create_from_input(input: &str) -> Maze {
         let mut cells: Vec<Vec<Tile>> = Vec::new();
-        let mut x = 0;
-        let mut y = 0;
+        let mut encoded_keys: u32 = 0;
 
-        let mut start_pos = None;
-        for row in input.trim().lines().map(|r| r.trim()) {
+        let mut start_positions = Vec::new();
+        for (y, row) in input.trim().lines().map(|r| r.trim()).enumerate() {
             let mut row_vec = Vec::new();
-            for row_c in row.chars() {
+            for (x, row_c) in row.chars().enumerate() {
                 if row_c == Tile::CH_ROBOT {
-                    start_pos = Some(Position { x, y });
+                    start_positions.push(Position { x, y });
                     row_vec.push(Tile::Empty);
                 } else {
                     row_vec.push(Tile::from_char(row_c));
                 }
-                x += 1;
+
+                if let Tile::Key { key_id: n } = row_vec.last().unwrap() {
+                    // store accessible keys as integer with every key_id bit set
+                    // (where key_id is 0-indexed, starting with 'a')
+                    encoded_keys |= (1 << n) as u32;
+                }
             }
             cells.push(row_vec);
-            x = 0;
-            y += 1;
         }
 
         Maze {
             cells,
-            start_pos: start_pos.unwrap(),
+            start_positions,
+            encoded_keys,
         }
     }
 
@@ -194,6 +235,33 @@ impl Maze {
             Some(row) => row.get(x as usize),
             None => None,
         }
+    }
+
+    // return a string of key chars where each key's door is in this maze
+    fn doors_with_keys_here(&self) -> String {
+        let mut doors: u32 = 0;
+        let mut keys: u32 = 0;
+        for cell in self.cells.iter().flat_map(|r| r.iter()).into_iter() {
+            match cell {
+                Tile::Key { key_id: n } => {
+                    keys |= 1 << *n;
+                }
+                Tile::Door { key_id: n } => {
+                    doors |= 1 << *n;
+                }
+                _ => {}
+            }
+        }
+
+        let keys_with_doors = keys & doors;
+        let mut keys_with_doors_here = String::new();
+        for i in 0..26 {
+            if (keys_with_doors >> i) & 1 == 1 {
+                keys_with_doors_here.push(std::char::from_u32('a' as u32 + i).unwrap())
+            }
+        }
+
+        keys_with_doors_here
     }
 }
 
@@ -269,31 +337,36 @@ mod tests {
 
     #[test]
     fn test_part1() {
-        assert_eq!(part1(), 3832)
+        assert_eq!(part1(INPUT), 3832)
     }
 
     #[test]
     fn test_part1_tiny() {
-        assert_eq!(steps_to_find_all_keys(INPUT_TINY, 2), 8)
+        assert_eq!(part1(INPUT_TINY), 8)
     }
 
     #[test]
     fn test_part1_med() {
-        assert_eq!(steps_to_find_all_keys(INPUT_MED, 6), 86)
+        assert_eq!(part1(INPUT_MED), 86)
     }
 
     #[test]
     fn test_part1_med2() {
-        assert_eq!(steps_to_find_all_keys(INPUT_MED2, 7), 132)
+        assert_eq!(part1(INPUT_MED2), 132)
     }
 
     #[test]
     fn test_part1_med3() {
-        assert_eq!(steps_to_find_all_keys(INPUT_MED3, 16), 136)
+        assert_eq!(part1(INPUT_MED3), 136)
     }
 
     #[test]
     fn test_part1_med4() {
-        assert_eq!(steps_to_find_all_keys(INPUT_MED4, 9), 81)
+        assert_eq!(part1(INPUT_MED4), 81)
+    }
+
+    #[test]
+    fn test_part2() {
+        assert_eq!(part2(), 1724)
     }
 }
